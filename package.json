@@ -1,0 +1,65 @@
+{
+  "name": "harfbuzz-wasm",
+  "version": "1.0.0",
+  "description": "Production-ready WebAssembly build of HarfBuzz text shaping library",
+  "main": "harfbuzz-wasm-artifacts/harfbuzz.js",
+  "type": "module",
+  "scripts": {
+    "build": "./build-wasm-production.sh",
+    "build:debug": "./build-wasm-production.sh --debug",
+    "build:minimal": "./build-wasm-production.sh --no-simd --no-threading --no-native-fs",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node test/wasm/test-simd-performance.js && node test/wasm/test-filesystem-integration.js",
+    "test:integration": "node test/integration/browser-tests.js",
+    "benchmark": "node test/benchmark-runner.js",
+    "ci:local": "act -W .github/workflows/harfbuzz-wasm-ci.yml",
+    "ci:validate": "act -W .github/workflows/harfbuzz-wasm-ci.yml -n"
+  },
+  "keywords": [
+    "harfbuzz",
+    "text-shaping",
+    "typography",
+    "webassembly",
+    "wasm",
+    "simd",
+    "unicode",
+    "fonts",
+    "performance"
+  ],
+  "author": "Superstruct Ltd",
+  "license": "MIT",
+  "homepage": "https://github.com/superstruct/harfbuzz.wasm#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superstruct/harfbuzz.wasm.git",
+    "branch": "wasm"
+  },
+  "bugs": {
+    "url": "https://github.com/superstruct/harfbuzz.wasm/issues"
+  },
+  "devDependencies": {
+    "playwright": "^1.40.0",
+    "@playwright/test": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "harfbuzz-wasm-artifacts/",
+    "src/wasm/",
+    "docs/ai/",
+    "build-wasm-production.sh",
+    "wasm-cross.ini",
+  ],
+  "exports": {
+    ".": {
+      "import": "./harfbuzz-wasm-artifacts/harfbuzz.js",
+      "types": "./harfbuzz-wasm-artifacts/harfbuzz.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/superstruct"
+  }
+}
