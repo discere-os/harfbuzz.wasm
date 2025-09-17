@@ -1,11 +1,12 @@
-[![Linux CI Status](https://github.com/harfbuzz/harfbuzz/actions/workflows/linux.yml/badge.svg)](https://github.com/harfbuzz/harfbuzz/actions/workflows/linux.yml)
-[![macoOS CI Status](https://github.com/harfbuzz/harfbuzz/actions/workflows/macos.yml/badge.svg)](https://github.com/harfbuzz/harfbuzz/actions/workflows/macos.yml)
-[![Windows CI Status](https://github.com/harfbuzz/harfbuzz/actions/workflows/msvc.yml/badge.svg)](https://github.com/harfbuzz/harfbuzz/actions/workflows/msvc.yml)
-[![OSS-Fuzz Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/harfbuzz.svg)](https://oss-fuzz-build-logs.storage.googleapis.com/index.html#harfbuzz)
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/15166/badge.svg)](https://scan.coverity.com/projects/harfbuzz)
-[![Packaging status](https://repology.org/badge/tiny-repos/harfbuzz.svg)](https://repology.org/project/harfbuzz/versions)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/harfbuzz/harfbuzz/badge)](https://securityscorecards.dev/viewer/?uri=github.com/harfbuzz/harfbuzz)
+# @discere-os/harfbuzz.wasm
 
+WebAssembly port of HarfBuzz - Text shaping engine supporting OpenType and Apple Advanced Typography.
+
+[![CI/CD](https://github.com/discere-os/discere-nucleus/actions/workflows/harfbuzz-wasm-ci.yml/badge.svg)](https://github.com/discere-os/discere-nucleus/actions)
+[![JSR](https://jsr.io/badges/@discere-os/harfbuzz.wasm)](https://jsr.io/@discere-os/harfbuzz.wasm)
+[![npm version](https://badge.fury.io/js/@discere-os%2Fharfbuzz.wasm.svg)](https://badge.fury.io/js/@discere-os%2Fharfbuzz.wasm)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](COPYING)
+[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/discere-os/discere-nucleus)
 
 # HarfBuzz
 
