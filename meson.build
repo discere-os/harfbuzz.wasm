@@ -440,6 +440,7 @@ if cmake_package_install_dir == ''
 endif
 
 subdir('src')
+subdir('wasm')
 
 if not get_option('utilities').disabled()
   subdir('util')
