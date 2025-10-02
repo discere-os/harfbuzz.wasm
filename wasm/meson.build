@@ -36,6 +36,7 @@ shared_module(
   files('harfbuzz_wasm_side.c'),
   dependencies: [libharfbuzz_dep],
   name_prefix: '',
+  name_suffix: 'wasm',
   c_args: hb_wasm_cargs,
   link_args: hb_side_link_args,
   install: true,
