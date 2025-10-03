@@ -28,6 +28,7 @@ hb_side_link_args = [
   '-fPIC',
   '-O3',
   '-flto',
+  '-sERROR_ON_UNDEFINED_SYMBOLS=0',  # Host provides dependencies (freetype, glib, etc.)
   '-sEXPORTED_FUNCTIONS=["_harfbuzz_wasm_version"]',
 ]
 
