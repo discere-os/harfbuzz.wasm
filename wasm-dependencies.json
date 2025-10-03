@@ -1,0 +1,41 @@
+{
+  "wasm:freetype": {
+    "version": "^2.13.0",
+    "symbols": {
+      "required": [
+        "FT_Get_Char_Index",
+        "FT_Load_Glyph",
+        "FT_Get_Kerning"
+      ]
+    },
+    "loading": "eager",
+    "fallback": null
+  },
+  "wasm:glib": {
+    "version": "^2.78.0",
+    "symbols": {
+      "required": [
+        "g_malloc",
+        "g_free",
+        "g_strdup",
+        "g_utf8_get_char"
+      ]
+    },
+    "loading": "eager",
+    "fallback": null
+  },
+  "wasm:libc": {
+    "version": "*",
+    "symbols": {
+      "required": [
+        "malloc",
+        "free",
+        "memcpy",
+        "memset",
+        "qsort"
+      ]
+    },
+    "loading": "eager",
+    "fallback": null
+  }
+}
