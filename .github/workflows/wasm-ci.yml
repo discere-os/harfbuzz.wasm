@@ -1,418 +1,124 @@
-name: HarfBuzz WASM Production CI
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [ wasm ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ wasm ]
-  workflow_dispatch:
-
-env:
-  EMSCRIPTEN_VERSION: "4.0.14"
-  NODE_VERSION: "20"
-  PYTHON_VERSION: "3.11"
 
 jobs:
-  build-matrix:
-    name: Build (${{ matrix.config.name }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - name: "SIMD+Threading+WebGPU"
-            args: "--enable-webgpu"
-            features: "simd,threading,webgpu,native_fs"
-          - name: "SIMD+Threading"
-            args: ""
-            features: "simd,threading,native_fs"
-          - name: "SIMD Only"
-            args: "--no-threading"
-            features: "simd,native_fs"
-          - name: "Minimal"
-            args: "--no-simd --no-threading --no-native-fs"
-            features: "minimal"
-          - name: "Debug Build"
-            args: "--debug"
-            features: "debug,simd,threading,native_fs"
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: wasm
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            meson ninja-build \
-            python3-pip python3-setuptools \
-            pkg-config cmake \
-            ragel gtk-doc-tools \
-            libfreetype6-dev \
-            libglib2.0-dev \
-            libcairo2-dev \
-            libicu-dev \
-            libgraphite2-dev
-
-      - name: Install Python packages
-        run: |
-          pip3 install --user meson ninja pytest
-
-      - name: Cache Emscripten
-        id: cache-emscripten
-        uses: actions/cache@v3
-        with:
-          path: ~/emsdk
-          key: emscripten-${{ env.EMSCRIPTEN_VERSION }}-${{ runner.os }}
-
-      - name: Setup Emscripten
-        if: steps.cache-emscripten.outputs.cache-hit != 'true'
-        run: |
-          cd ~
-          git clone https://github.com/emscripten-core/emsdk.git
-          cd emsdk
-          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
-          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
-
-      - name: Activate Emscripten
-        run: |
-          cd ~/emsdk
-          source ./emsdk_env.sh
-          echo "EMSDK=$EMSDK" >> $GITHUB_ENV
-          echo "EMSCRIPTEN=$EMSCRIPTEN" >> $GITHUB_ENV
-          echo "EM_CONFIG=$EM_CONFIG" >> $GITHUB_ENV
-          echo "$EMSDK:$EMSDK/upstream/emscripten" >> $GITHUB_PATH
-
-      - name: Verify Emscripten installation
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          emcc --version
-          em++ --version
-
-      - name: Cache build dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/pip
-            builddir
-          key: harfbuzz-wasm-deps-${{ matrix.config.features }}-${{ hashFiles('meson.build', 'meson_options.txt') }}
-
-      - name: Run WASM build
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          chmod +x build-wasm-production.sh
-          ./build-wasm-production.sh ${{ matrix.config.args }}
-
-      - name: Run tests
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          cd builddir-wasm
-          meson test --verbose
-
-      - name: Run benchmarks
-        if: matrix.config.name != 'Debug Build'
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          node test/benchmark-runner.js
-
-      - name: Run SIMD performance tests  
-        if: matrix.config.name != 'Debug Build' && contains(matrix.config.features, 'simd')
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          node test/wasm/test-simd-performance.js
-
-      - name: Run filesystem integration tests
-        if: contains(matrix.config.features, 'native_fs')
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          node test/wasm/test-filesystem-integration.js
-
-      - name: Generate build statistics
-        run: |
-          echo "## Build Statistics (${{ matrix.config.name }})" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "harfbuzz-wasm-artifacts/harfbuzz.wasm" ]; then
-            WASM_SIZE=$(stat -f%z harfbuzz-wasm-artifacts/harfbuzz.wasm 2>/dev/null || stat -c%s harfbuzz-wasm-artifacts/harfbuzz.wasm)
-            echo "| WASM Binary Size | ${WASM_SIZE} bytes |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f "harfbuzz-wasm-artifacts/harfbuzz.js" ]; then
-            JS_SIZE=$(stat -f%z harfbuzz-wasm-artifacts/harfbuzz.js 2>/dev/null || stat -c%s harfbuzz-wasm-artifacts/harfbuzz.js)
-            echo "| JS Glue Size | ${JS_SIZE} bytes |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "| Features | ${{ matrix.config.features }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Configuration | ${{ matrix.config.name }} |" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "benchmark-results.json" ]; then
-            echo "| Benchmark Results | Available |" >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Upload WASM artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: harfbuzz-wasm-${{ matrix.config.features }}
-          path: harfbuzz-wasm-artifacts/
-          retention-days: 30
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-results-${{ matrix.config.features }}
-          path: |
-            builddir-wasm/meson-logs/
-            builddir-wasm/testlog.txt
-          retention-days: 7
-
-      - name: Upload benchmark results
-        if: matrix.config.name != 'Debug Build'
-        uses: actions/upload-artifact@v3
-        with:
-          name: benchmark-results-${{ matrix.config.features }}
-          path: benchmark-results.json
-          retention-days: 30
-
-  integration-tests:
-    name: Integration Tests
-    needs: build-matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: wasm
-          fetch-depth: 1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Download SIMD+Threading artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: harfbuzz-wasm-simd,threading,webgpu,native_fs
-          path: integration-test-artifacts/
-
-      - name: Install test dependencies
-        run: |
-          npm install playwright @playwright/test
-
-      - name: Run browser integration tests
-        run: |
-          npx playwright install chromium firefox webkit
-          node test/integration/browser-tests.js
-
-      - name: Generate integration test summary
-        run: |
-          echo "## Integration Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Browser Compatibility | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-          echo "| Font Loading | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-          echo "| Text Shaping | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-          echo "| SIMD Performance | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-
-  performance-analysis:
-    name: Performance Analysis
-    needs: build-matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: wasm
-
-      - name: Download all benchmark artifacts
-        uses: actions/download-artifact@v3
-        with:
-          pattern: benchmark-results-*
-          merge-multiple: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Analyze performance results
-        run: |
-          node test/performance/analyze-benchmarks.js
-
-      - name: Generate performance summary
-        run: |
-          echo "## Performance Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "| Configuration | Shaping Speed | Memory Usage | Binary Size |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------------|---------------|--------------|-------------|" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "performance-summary.json" ]; then
-            node -e "
-              const data = JSON.parse(require('fs').readFileSync('performance-summary.json', 'utf8'));
-              Object.entries(data.configs).forEach(([config, metrics]) => {
-                console.log(\`| \${config} | \${metrics.shapingSpeed} | \${metrics.memoryUsage} | \${metrics.binarySize} |\`);
-              });
-            " >> $GITHUB_STEP_SUMMARY
-          fi
-
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: wasm
-          fetch-depth: 0
-
-      - name: Run CodeQL analysis
-        uses: github/codeql-action/init@v2
-        with:
-          languages: cpp, javascript
-
-      - name: Setup Emscripten (minimal)
-        run: |
-          cd ~
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
-          cd emsdk
-          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
-          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
-
-      - name: Build for analysis
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          chmod +x build-wasm-production.sh
-          ./build-wasm-production.sh --no-simd --no-threading
-
-      - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v2
-
-      - name: Generate security summary
-        run: |
-          echo "## Security Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL Static Analysis | ✅ Completed |" >> $GITHUB_STEP_SUMMARY
-          echo "| Memory Safety | ✅ WASM Sandboxed |" >> $GITHUB_STEP_SUMMARY
-          echo "| Buffer Overflows | ✅ Protected |" >> $GITHUB_STEP_SUMMARY
-
-  release-artifacts:
-    name: Release Artifacts
-    needs: [build-matrix, integration-tests, performance-analysis]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/wasm' && github.event_name == 'push'
-    timeout-minutes: 5
-
-    steps:
-      - name: Download all WASM artifacts
-        uses: actions/download-artifact@v3
-        with:
-          pattern: harfbuzz-wasm-*
-          merge-multiple: false
-
-      - name: Create release package
-        run: |
-          mkdir -p release-package
-          
-          # Copy each configuration to organized structure
-          for config in simd,threading,webgpu,native_fs simd,threading,native_fs simd,native_fs minimal; do
-            config_name=$(echo "$config" | tr ',' '-')
-            if [ -d "harfbuzz-wasm-$config" ]; then
-              mkdir -p "release-package/$config_name"
-              cp -r "harfbuzz-wasm-$config"/* "release-package/$config_name/"
-            fi
-          done
-          
-          # Create package manifest
-          cat > release-package/manifest.json << 'EOF'
-          {
-            "version": "latest",
-            "configurations": {
-              "simd-threading-webgpu-native_fs": {
-                "description": "Full-featured build with SIMD, threading, WebGPU, and native filesystem support",
-                "features": ["simd", "threading", "webgpu", "native_fs"],
-                "recommended": true
-              },
-              "simd-threading-native_fs": {
-                "description": "Standard build with SIMD, threading, and native filesystem support",
-                "features": ["simd", "threading", "native_fs"],
-                "recommended": false
-              },
-              "simd-native_fs": {
-                "description": "SIMD-only build for single-threaded environments",
-                "features": ["simd", "native_fs"],
-                "recommended": false
-              },
-              "minimal": {
-                "description": "Minimal build for maximum compatibility",
-                "features": [],
-                "recommended": false
-              }
-            }
-          }
-          EOF
-
-      - name: Upload release package
-        uses: actions/upload-artifact@v3
-        with:
-          name: harfbuzz-wasm-release-package
-          path: release-package/
-          retention-days: 90
-
-      - name: Generate release summary
-        run: |
-          echo "## Release Package Created" >> $GITHUB_STEP_SUMMARY
-          echo "| Configuration | Binary Size | Features |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------------|-------------|----------|" >> $GITHUB_STEP_SUMMARY
-          
-          for config_dir in release-package/*/; do
-            if [ -d "$config_dir" ]; then
-              config_name=$(basename "$config_dir")
-              if [ -f "$config_dir/harfbuzz.wasm" ]; then
-                size=$(stat -f%z "$config_dir/harfbuzz.wasm" 2>/dev/null || stat -c%s "$config_dir/harfbuzz.wasm")
-                features=$(echo "$config_name" | tr '-' ',')
-                echo "| $config_name | ${size} bytes | $features |" >> $GITHUB_STEP_SUMMARY
-              fi
-            fi
-          done
-  deploy-cloudflare-release:
-    name: Deploy Release to Cloudflare R2
-    runs-on: ubuntu-latest
-    needs: [build-matrix]
-    if: startsWith(github.ref, 'refs/tags/v')
+  test:
+    name: Test Suite (Deno)
+    runs-on: [self-hosted, docker, wasm, emscripten]
+    container:
+      image: ghcr.io/discere-os/wasm-builder:main-b23d443
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download SIMD+Threading build
-        uses: actions/download-artifact@v3
+      - name: Type check
+        run: deno check src/lib/index.ts
+
+      - name: Build WASM modules with Meson
+        run: deno task build:wasm
+
+      - name: Run Deno tests
+        run: deno task test
+
+      - name: Run benchmarks
+        run: deno task bench
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: harfbuzz-wasm-simd,threading,native_fs
-          path: ./
+          name: wasm-modules
+          path: |
+            install/wasm/
+          retention-days: 7
+
+  build:
+    name: Build Distribution
+    runs-on: [self-hosted, docker, wasm, emscripten]
+    needs: test
+    container:
+      image: ghcr.io/discere-os/wasm-builder:main-b23d443
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build WASM modules
+        run: deno task build:wasm
+
+      - name: Fix artifact permissions
+        run: |
+          # Ensure artifacts are readable by runner (files created as root in container)
+          sudo chown -R $(id -u):$(id -g) install/ || chown -R $(id -u):$(id -g) install/
+          chmod -R u+rw,go+r install/
+
+      - name: Generate WASM Build Summary
+        run: |
+          echo "# 📦 WASM Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Build artifacts analysis
+          if [[ -f "install/wasm/harfbuzz-side.wasm" && -f "install/wasm/harfbuzz-main" ]]; then
+            SIDE_SIZE=$(stat -c%s "install/wasm/harfbuzz-side.wasm" 2>/dev/null || stat -f%z "install/wasm/harfbuzz-side.wasm")
+
+            echo "## File Sizes" >> $GITHUB_STEP_SUMMARY
+            echo "| Module | Size |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+            echo "| SIDE_MODULE | $(numfmt --to=iec $SIDE_SIZE 2>/dev/null || echo "${SIDE_SIZE} bytes") |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Build artifacts not found" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Build environment info
+          echo "## Build Environment" >> $GITHUB_STEP_SUMMARY
+          echo "- **Emscripten**: \`$(emcc --version | head -n1 | cut -d' ' -f2)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Meson**: \`$(meson --version)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deno**: \`$(deno --version | head -n1 | cut -d' ' -f2)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Runner**: \`$(uname -m)\` $(uname -s)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-package
+          path: |
+            install/
+          retention-days: 7
+
+  deploy-cloudflare-release:
+    name: Deploy Release to Cloudflare R2
+    runs-on: [self-hosted, docker, wasm, emscripten]
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    container:
+      image: ghcr.io/discere-os/wasm-builder:main-b23d443
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-package
+          path: ./install
 
       - name: Set release version
         id: release-version
@@ -421,127 +127,90 @@ jobs:
       - name: Calculate SHA-256
         id: sha
         run: |
-          WASM_FILE="harfbuzz.wasm"
+          WASM_FILE="install/wasm/harfbuzz-side.wasm"
           SHA=$(sha256sum "$WASM_FILE" | awk '{print $1}')
           echo "sha=${SHA}" >> $GITHUB_OUTPUT
           echo "${SHA}" > "${WASM_FILE}.sha256"
           echo "🔒 SHA-256: ${SHA}"
 
-      - name: Deploy versioned WASM to Cloudflare R2
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: |
-            VERSION="${{ steps.release-version.outputs.VERSION }}"
-
-            # Deploy to @version path (immutable)
-            r2 object put discere-os-wasm-production/harfbuzz/@${VERSION}/harfbuzz.wasm \
-              --file=harfbuzz.wasm \
-              --content-type=application/wasm \
-              --cache-control="public, max-age=31536000, immutable"
-
-            r2 object put discere-os-wasm-production/harfbuzz/@${VERSION}/harfbuzz.wasm.sha256 \
-              --file=harfbuzz.wasm.sha256 \
-              --content-type=text/plain \
-              --cache-control="public, max-age=31536000, immutable"
-
-            # Deploy JS wrapper if exists
-            if [ -f "harfbuzz.js" ]; then
-              r2 object put discere-os-wasm-production/harfbuzz/@${VERSION}/harfbuzz.js \
-                --file=harfbuzz.js \
-                --content-type=application/javascript \
-                --cache-control="public, max-age=31536000, immutable"
-            fi
-
-      - name: Deploy SHA path to Cloudflare R2
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: |
-            SHA="${{ steps.sha.outputs.sha }}"
-            SHA_SHORT="${SHA:0:7}"
-
-            # Deploy to @sha-xxx path (content-addressable, immutable)
-            r2 object put discere-os-wasm-production/harfbuzz/@sha-${SHA_SHORT}/harfbuzz.wasm \
-              --file=harfbuzz.wasm \
-              --content-type=application/wasm \
-              --cache-control="public, max-age=31536000, immutable"
-
-            r2 object put discere-os-wasm-production/harfbuzz/@sha-${SHA_SHORT}/harfbuzz.wasm.sha256 \
-              --file=harfbuzz.wasm.sha256 \
-              --content-type=text/plain \
-              --cache-control="public, max-age=31536000, immutable"
-
-      - name: Update latest pointer
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: |
-            VERSION="${{ steps.release-version.outputs.VERSION }}"
-            echo "${VERSION}" > latest.txt
-
-            # Update @latest.txt pointer (short cache)
-            r2 object put discere-os-wasm-production/harfbuzz/@latest.txt \
-              --file=latest.txt \
-              --content-type=text/plain \
-              --cache-control="public, max-age=300"
-
-      - name: Verify Cloudflare deployment
+      - name: Deploy to Cloudflare R2
         run: |
-          sleep 15  # Wait for R2 propagation
-          curl -f "https://wasm.discere.cloud/harfbuzz@${{ steps.release-version.outputs.VERSION }}/harfbuzz.wasm" || exit 1
+          VERSION="${{ steps.release-version.outputs.VERSION }}"
+          SHA="${{ steps.sha.outputs.sha }}"
+
+          # Deploy SIDE_MODULE to versioned path (immutable)
+          wrangler r2 object put discere-os-wasm-production/harfbuzz@${VERSION}/side.wasm \
+            --remote \
+            --file=install/wasm/harfbuzz-side.wasm \
+            --content-type=application/wasm \
+            --cache-control="public, max-age=31536000, immutable"
+
+          # Deploy to SHA path (content-addressable)
+          wrangler r2 object put discere-os-wasm-production/harfbuzz@sha-${SHA:0:7}/side.wasm \
+            --remote \
+            --file=install/wasm/harfbuzz-side.wasm \
+            --content-type=application/wasm \
+            --cache-control="public, max-age=31536000, immutable"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify deployment
+        run: |
+          sleep 15
+          VERSION="${{ steps.release-version.outputs.VERSION }}"
+          curl -I "https://wasm.discere.cloud/harfbuzz@${VERSION}/side.wasm" || exit 1
           echo "✅ Cloudflare R2 deployment verified"
 
   deploy-cloudflare-snapshot:
     name: Deploy Snapshot to Cloudflare R2
-    runs-on: ubuntu-latest
-    needs: [build-matrix]
+    runs-on: [self-hosted, docker, wasm, emscripten]
+    needs: [build]
     if: github.ref == 'refs/heads/wasm' && github.event_name == 'push'
+    container:
+      image: ghcr.io/discere-os/wasm-builder:main-b23d443
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download SIMD+Threading build
-        uses: actions/download-artifact@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: harfbuzz-wasm-simd,threading,native_fs
-          path: ./
+          name: dist-package
+          path: ./install
 
       - name: Set snapshot version
         id: version
-        run: echo "VERSION=sha-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: echo "VERSION=sha-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
 
-      - name: Calculate SHA-256
-        id: sha
+      - name: Calculate SHA-256 and generate metadata
+        id: metadata
         run: |
-          WASM_FILE="harfbuzz.wasm"
+          WASM_FILE="install/wasm/harfbuzz-side.wasm"
           SHA=$(sha256sum "$WASM_FILE" | awk '{print $1}')
+          SIZE=$(stat -c%s "$WASM_FILE")
+
           echo "sha=${SHA}" >> $GITHUB_OUTPUT
+          echo "size=${SIZE}" >> $GITHUB_OUTPUT
           echo "${SHA}" > "${WASM_FILE}.sha256"
+
           echo "🔒 SHA-256: ${SHA}"
+          echo "📦 Size: $((SIZE / 1024)) KB"
 
-      - name: Deploy snapshot WASM to Cloudflare R2
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: |
-            VERSION="${{ steps.version.outputs.VERSION }}"
+      - name: Deploy snapshot to Cloudflare R2
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
 
-            # Deploy to @sha-xxx path (snapshot)
-            r2 object put discere-os-wasm-production/harfbuzz/@${VERSION}/harfbuzz.wasm \
-              --file=harfbuzz.wasm \
-              --content-type=application/wasm \
-              --cache-control="public, max-age=31536000, immutable"
-
-            r2 object put discere-os-wasm-production/harfbuzz/@${VERSION}/harfbuzz.wasm.sha256 \
-              --file=harfbuzz.wasm.sha256 \
-              --content-type=text/plain \
-              --cache-control="public, max-age=31536000, immutable"
-
-      - name: Log deployment success
-        run: echo "✅ Snapshot ${{ steps.version.outputs.VERSION }} deployed to Cloudflare R2"
+          # Deploy SIDE_MODULE only (MAIN_MODULE for testing/NPM only)
+          wrangler r2 object put discere-os-wasm-production/harfbuzz@${VERSION}/side.wasm \
+            --remote \
+            --file=install/wasm/harfbuzz-side.wasm \
+            --content-type=application/wasm \
+            --cache-control="public, max-age=31536000, immutable"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
