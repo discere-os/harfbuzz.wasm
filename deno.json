@@ -1,14 +1,19 @@
 {
   "name": "@discere-os/harfbuzz.wasm",
+  "version": "8.3.0",
   "exports": {
     ".": "./",
     "./side": "./install/wasm/harfbuzz-side.wasm",
     "./main": "./install/wasm/harfbuzz-main.js"
   },
   "tasks": {
-    "build:main": "PKG_CONFIG_PATH=$PWD/../freetype.wasm/install/wasm/pkgconfig meson setup build-main --cross-file=scripts/emscripten.cross -Ddefault_library=static -Dtests=disabled -Dbuildtype=release --prefix=$PWD/install -Dlibdir=wasm -Dbindir=wasm && meson compile -C build-main harfbuzz-main && meson install -C build-main",
-    "build:side": "PKG_CONFIG_PATH=$PWD/../freetype.wasm/install/wasm/pkgconfig meson setup build-side --cross-file=scripts/emscripten.cross -Ddefault_library=static -Dtests=disabled -Dbuildtype=release --prefix=$PWD/install -Dlibdir=wasm -Dbindir=wasm -Dc_args='-msimd128' -Dc_link_args='-sSIDE_MODULE=2 -fPIC -O3 -flto' && meson compile -C build-side harfbuzz-side && meson install -C build-side && python3 scripts/postinstall.py $PWD/install",
-    "build:wasm": "deno task build:main && deno task build:side && deno task manifest",
-    "manifest": "deno run --allow-read --allow-write --allow-run ../../../../scripts/generate-wasm-manifest.ts ."
+    "build:wasm": "bash scripts/unified-build.sh standard",
+    "build:minimal": "bash scripts/unified-build.sh minimal",
+    "build:webgpu": "bash scripts/unified-build.sh webgpu",
+    "bench:simd": "deno run --allow-read --allow-ffi bench/simd-shaping-bench.ts",
+    "validate:performance": "deno task bench:simd",
+    "clean": "rm -rf build build-* install",
+    "demo": "deno run --allow-read demo.ts",
+    "test": "deno test --allow-read tests/deno/"
   }
 }

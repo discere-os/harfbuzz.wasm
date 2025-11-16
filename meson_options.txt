@@ -61,11 +61,21 @@ option('cmakepackagedir', type: 'string',
 
 # WASM-specific build options
 # Copyright 2025 Superstruct Ltd, New Zealand
+option('wasm_build_type', type: 'combo',
+       choices: ['minimal', 'standard', 'webgpu'],
+       value: 'standard',
+       description: 'WASM build variant')
+
 option('wasm_simd', type : 'boolean', value : true,
        description : 'Enable WebAssembly SIMD optimizations')
 
 option('wasm_threading', type : 'boolean', value : true,
        description : 'Enable WebAssembly threading support')
+
+option('wasm_optimize', type: 'combo',
+       choices: ['size', 'speed', 'balanced'],
+       value: 'balanced',
+       description: 'Optimization strategy for WASM builds')
 
 option('wasm_webgpu', type : 'boolean', value : false,
        description : 'Enable WebGPU integration for compute acceleration')

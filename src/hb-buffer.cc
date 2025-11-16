@@ -30,6 +30,13 @@
 #include "hb-buffer.hh"
 #include "hb-utf.hh"
 
+#ifdef __EMSCRIPTEN__
+extern "C" {
+#include "../wasm/web_native_simd_shaping.h"
+#include "../wasm/web_native_capabilities.c"
+}
+#endif
+
 
 /**
  * SECTION: hb-buffer
@@ -409,6 +416,29 @@ hb_buffer_t::clear_positions ()
   out_len = 0;
   out_info = info;
 
+#ifdef __EMSCRIPTEN__
+  // Use SIMD-optimized buffer operations when available
+  if (hb_web_has_simd() && len >= 8) {
+    // SIMD-optimized zero fill
+    size_t bytes = sizeof (pos[0]) * len;
+    unsigned char zero_buf[16] = {0};
+
+    // Use SIMD copy with zero buffer for clearing
+    // This is faster than memset for large buffers
+    if (bytes >= 128) {
+      size_t chunks = bytes / 16;
+      for (size_t i = 0; i < chunks; i++) {
+        hb_simd_copy_buffer((char*)pos + i * 16, zero_buf, 16);
+      }
+      size_t remainder = bytes % 16;
+      if (remainder > 0) {
+        hb_memset((char*)pos + chunks * 16, 0, remainder);
+      }
+      return;
+    }
+  }
+#endif
+
   hb_memset (pos, 0, sizeof (pos[0]) * len);
 }
 
@@ -484,6 +514,12 @@ hb_buffer_t::move_to (unsigned int i)
     unsigned int count = i - out_len;
     if (unlikely (!make_room_for (count, count))) return false;
 
+#ifdef __EMSCRIPTEN__
+    // Use SIMD for large buffer copies
+    if (hb_web_has_simd() && count >= 8) {
+      hb_simd_copy_buffer(out_info + out_len, info + idx, count * sizeof (out_info[0]));
+    } else
+#endif
     memmove (out_info + out_len, info + idx, count * sizeof (out_info[0]));
     idx += count;
     out_len += count;
@@ -506,6 +542,12 @@ hb_buffer_t::move_to (unsigned int i)
 
     idx -= count;
     out_len -= count;
+#ifdef __EMSCRIPTEN__
+    // Use SIMD for large buffer copies
+    if (hb_web_has_simd() && count >= 8) {
+      hb_simd_copy_buffer(info + idx, out_info + out_len, count * sizeof (out_info[0]));
+    } else
+#endif
     memmove (info + idx, out_info + out_len, count * sizeof (out_info[0]));
   }
 
