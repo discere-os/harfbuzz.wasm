@@ -1,0 +1,20 @@
+{
+  "name": "harfbuzz",
+  "dependencies": [
+    {
+      "name": "freetype",
+      "version": "latest",
+      "required": true
+    },
+    {
+      "name": "glib",
+      "version": "latest",
+      "required": false
+    },
+    {
+      "name": "icu",
+      "version": "latest",
+      "required": false
+    }
+  ]
+}
