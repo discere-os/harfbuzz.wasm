@@ -61,14 +61,23 @@ option('cmakepackagedir', type: 'string',
 
 # WASM-specific build options
 # Copyright 2025 Superstruct Ltd, New Zealand
+
+option('wasm_build_type', type: 'combo',
+       choices: ['minimal', 'standard', 'webgpu'], value: 'standard',
+       description: 'WASM build type (minimal=2MB, standard=4MB, webgpu=6MB)')
+
 option('wasm_simd', type : 'boolean', value : true,
-       description : 'Enable WebAssembly SIMD optimizations')
+       description : 'Enable WebAssembly SIMD optimizations (mandatory for 3-5x speedup)')
 
 option('wasm_threading', type : 'boolean', value : true,
-       description : 'Enable WebAssembly threading support')
+       description : 'Enable WebAssembly threading support (10x speedup vs emulation)')
 
 option('wasm_webgpu', type : 'boolean', value : false,
        description : 'Enable WebGPU integration for compute acceleration')
+
+option('wasm_optimize', type: 'combo',
+       choices: ['size', 'speed', 'balanced'], value: 'balanced',
+       description: 'Optimization strategy')
 
 option('wasm_native_fs', type : 'boolean', value : true,
        description : 'Enable WASM-native filesystem features (IDBFS)')
@@ -76,8 +85,8 @@ option('wasm_native_fs', type : 'boolean', value : true,
 option('wasm_thread_pool_size', type : 'integer', value : 4, min : 1, max : 16,
        description : 'Size of WebAssembly thread pool')
 
-option('wasm_initial_memory', type : 'string', value : '32MB',
+option('wasm_initial_memory', type : 'string', value : '128MB',
        description : 'Initial WebAssembly memory size')
 
-option('wasm_maximum_memory', type : 'string', value : '256MB',
+option('wasm_maximum_memory', type : 'string', value : '1GB',
        description : 'Maximum WebAssembly memory size')

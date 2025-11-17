@@ -1,14 +1,56 @@
 {
   "name": "@discere-os/harfbuzz.wasm",
+  "version": "1.0.0",
+  "description": "WASM port of HarfBuzz with web-native optimizations for Discere OS",
   "exports": {
-    ".": "./",
+    ".": "./src/lib/index.ts",
     "./side": "./install/wasm/harfbuzz-side.wasm",
-    "./main": "./install/wasm/harfbuzz-main.js"
+    "./main": "./install/wasm/harfbuzz-main.js",
+    "./types": "./src/lib/types.ts"
+  },
+  "imports": {
+    "module": "data:application/javascript,export const createRequire = () => () => { throw new Error('Node.js not supported'); }; export default { createRequire };",
+    "path": "data:application/javascript,export const join = (...args) => args.join('/'); export default { join };",
+    "fs": "data:application/javascript,export const readFileSync = () => { throw new Error('fs not supported'); }; export default { readFileSync };"
   },
   "tasks": {
-    "build:main": "PKG_CONFIG_PATH=$PWD/../freetype.wasm/install/wasm/pkgconfig meson setup build-main --cross-file=scripts/emscripten.cross -Ddefault_library=static -Dtests=disabled -Dbuildtype=release --prefix=$PWD/install -Dlibdir=wasm -Dbindir=wasm && meson compile -C build-main harfbuzz-main && meson install -C build-main",
-    "build:side": "PKG_CONFIG_PATH=$PWD/../freetype.wasm/install/wasm/pkgconfig meson setup build-side --cross-file=scripts/emscripten.cross -Ddefault_library=static -Dtests=disabled -Dbuildtype=release --prefix=$PWD/install -Dlibdir=wasm -Dbindir=wasm -Dc_args='-msimd128' -Dc_link_args='-sSIDE_MODULE=2 -fPIC -O3 -flto' && meson compile -C build-side harfbuzz-side && meson install -C build-side && python3 scripts/postinstall.py $PWD/install",
-    "build:wasm": "deno task build:main && deno task build:side && deno task manifest",
-    "manifest": "deno run --allow-read --allow-write --allow-run ../../../../scripts/generate-wasm-manifest.ts ."
+    "build:wasm": "bash scripts/unified-build.sh standard",
+    "build:minimal": "bash scripts/unified-build.sh minimal",
+    "build:webgpu": "bash scripts/unified-build.sh webgpu",
+    "build:clean": "CLEAN=true bash scripts/unified-build.sh standard",
+    "clean": "rm -rf build build-* install",
+    "demo": "deno run --allow-read demo-deno.ts",
+    "test": "deno test --allow-read tests/deno/",
+    "test:basic": "deno test --allow-read tests/deno/basic.test.ts",
+    "test:performance": "deno test --allow-read tests/deno/performance.test.ts",
+    "bench": "deno bench bench/simd_bench.ts",
+    "validate:all": "deno task test && deno task bench",
+    "check": "deno fmt --check && deno lint",
+    "fmt": "deno fmt"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "publish": {
+    "exclude": [
+      "build*",
+      "*.sh",
+      ".git*",
+      "*.md",
+      "bench/",
+      "demo-*.ts",
+      "wasm/*.c",
+      "wasm/*.h"
+    ]
   }
 }
