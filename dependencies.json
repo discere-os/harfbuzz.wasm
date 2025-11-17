@@ -1,0 +1,38 @@
+{
+  "dependencies": [
+    {
+      "name": "freetype",
+      "version": "2.13.2",
+      "type": "side",
+      "url": "https://wasm.discere.cloud/freetype.wasm/v2.13.2/side/freetype-side.wasm",
+      "integrity": "sha384-placeholder",
+      "symbols": {
+        "required": [
+          "FT_Init_FreeType",
+          "FT_New_Memory_Face",
+          "FT_Set_Char_Size",
+          "FT_Load_Glyph",
+          "FT_Get_Char_Index",
+          "FT_Get_Kerning"
+        ]
+      },
+      "loading": "eager",
+      "fallback": null
+    }
+  ],
+  "buildInfo": {
+    "architecture": "dual",
+    "targets": {
+      "SIDE_MODULE": {
+        "description": "Production build for runtime dlopen() by discere-concha.wasm",
+        "size_target": "70-200KB",
+        "features": ["dynamic_linking", "minimal_runtime"]
+      },
+      "MAIN_MODULE": {
+        "description": "Self-contained build for testing and NPM distribution",
+        "size_target": "2-4MB",
+        "features": ["complete_runtime", "es6_module"]
+      }
+    }
+  }
+}
